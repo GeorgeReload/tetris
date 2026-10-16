@@ -1,6 +1,19 @@
 import 'package:flutter/material.dart';
 
 abstract final class GameColors {
+  static const Color background = Color.fromARGB(255, 228, 244, 255);        // 浅暖白
+  static const Color gameAreaGrid = Color.fromRGBO(207, 210, 219, 1);       // 米灰格线
+  static const Color gameAreaNullSquare = Color.fromARGB(255, 228, 244, 255); // 空格同背景
+  static const Color gameAreaSquare = Color.fromARGB(255, 255, 174, 72);     // 柔和亮橙（主色方块）
+  static const Color buttonIcon = Color.fromARGB(255, 255, 232, 40);         // 明亮蓝按钮图标
+  static const Color buttonBackground = Color.fromARGB(255, 40, 197, 179);
+  static const Color text = Color.fromARGB(255, 71, 95, 115);               // 深灰文字
+  static const Color gameOverText1 = Color.fromARGB(255, 71, 95, 115);       // 同文字色
+  static const Color gameOverText2 = Color.fromARGB(255, 149, 75, 191);       // 紫色游戏结束提示
+}
+
+/*
+abstract final class GameColors {
   static const Color background = Color(0xFFFAFAF5);        // 浅暖白
   static const Color gameAreaGrid = Color(0xFFE0DED6);       // 米灰格线
   static const Color gameAreaNullSquare = Color(0xFFFAFAF5); // 空格同背景
@@ -11,6 +24,7 @@ abstract final class GameColors {
   static const Color gameOverText1 = Color(0xFF666666);       // 同文字色
   static const Color gameOverText2 = Color(0xFF4D9FFF);       // 紫色游戏结束提示
 }
+
 abstract final class GameColors_Duobaan { // 多巴胺
   static const Color background = Color(0xFFFFF6E8);        // 温暖奶黄色背景
   static const Color gameAreaGrid = Color(0xFFFFA07A);       // 亮橙网格线
@@ -41,3 +55,4 @@ abstract final class GameColors_Macarons { // 玛卡龙
   static const Color text = Color(0xFF666666);
   static const Color gameOverText = Color(0xFF666666);
 }
+*/

@@ -3,6 +3,21 @@ import 'dart:math';
 import 'package:tetris/combinations.dart';
 import 'package:flutter/material.dart';
 import 'package:tetris/game_colors.dart';
+import 'dart:convert';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+
+class FrozenNotifier extends ChangeNotifier {
+  void toggle() {
+    notifyListeners();
+  }
+}
+
+class ClearNotifier extends ChangeNotifier {
+  void toggle() {
+    notifyListeners();
+  }
+}
 
 class ScoreToInterval {
   final int score;
@@ -43,28 +58,42 @@ class Playground {
     if (x < 0 || x >= 10 || y < 0 || y >= 22) return;
     _grid[x][y] = value;
   }
+
+  String toJson() {
+    return jsonEncode(_grid);
+  }
+
+  void fromJson(String jsonString) {
+    List<dynamic> jsonData = jsonDecode(jsonString);
+    for (int i = 0; i < 10; i++) {
+      _grid[i] = List<int>.from(jsonData[i]);
+    }
+  }
 }
 
 class GameArea {
   Playground playground = Playground();
 
   Combination? fallingCombination;
-  Point<int> position = Point(3, 0);
+  Point<int> fallingPosition = Point(3, 0);
 
   PreviewArea previewArea;
 
   int score = 0;
   bool isPaused = false;
   bool isGameOver = false;
+  bool isShowAbout = false;
   int duration = 0;
   bool needRepaint = true;
+  FrozenNotifier frozenNotifier = FrozenNotifier();
+  ClearNotifier clearNotifier = ClearNotifier();
 
   GameArea(this.previewArea) {
-    fallingCombination = getNextCombination();
+    fallingCombination = previewArea.getCombination();
   }
 
   void rotate() {
-    if (isGameOver || isPaused) return;
+    if (isGameOver || isPaused || isShowAbout) return;
     needRepaint = true;
     fallingCombination!.rotate();
     if (isCollision()) {
@@ -73,37 +102,41 @@ class GameArea {
   }
 
   void moveLeft() {
-    if (isGameOver || isPaused) return;
+    if (isGameOver || isPaused || isShowAbout) return;
     needRepaint = true;
-    position = Point(position.x - 1, position.y);
+    fallingPosition = Point(fallingPosition.x - 1, fallingPosition.y);
     if (isCollision()) {
-      position = Point(position.x + 1, position.y);
+      fallingPosition = Point(fallingPosition.x + 1, fallingPosition.y);
     }
   }
 
   void moveRight() {
-    if (isGameOver || isPaused) return;
+    if (isGameOver || isPaused || isShowAbout) return;
     needRepaint = true;
-    position = Point(position.x + 1, position.y);
+    fallingPosition = Point(fallingPosition.x + 1, fallingPosition.y);
     if (isCollision()) {
-      position = Point(position.x - 1, position.y);
+      fallingPosition = Point(fallingPosition.x - 1, fallingPosition.y);
     }
   }
 
   void moveDown() {
-    if (isGameOver || isPaused) return;
+    if (isGameOver || isPaused || isShowAbout) return;
     needRepaint = true;
     _fall();
   }
 
   void _fall() {
-    position = Point(position.x, position.y + 1);
+    fallingPosition = Point(fallingPosition.x, fallingPosition.y + 1);
     if (isCollision()) {
-      position = Point(position.x, position.y - 1);
+      fallingPosition = Point(fallingPosition.x, fallingPosition.y - 1);
       mergeCombination();
-      score += calculateScore(clearRow());
-      fallingCombination = getNextCombination();
-      position = Point(3, 0);
+
+      int clearedRows = clearRow();
+      clearedRows > 0 ? clearNotifier.toggle() : frozenNotifier.toggle();
+
+      score += calculateScore(clearedRows);
+      fallingCombination = previewArea.getCombination();
+      fallingPosition = Point(3, 0);
       if (isCollision()) {
         isGameOver = true; // Game over logic can be added here
       }
@@ -128,19 +161,79 @@ class GameArea {
     playground = Playground();
     score = 0;
     isGameOver = false;
-    position = Point(3, 0);
-    fallingCombination = getNextCombination();
+    fallingPosition = Point(3, 0);
+    previewArea.getCombination();
+    fallingCombination = previewArea.getCombination();
   }
-  
 
   void pause() {
     isPaused = !isPaused;
+  }
+  void showAbout() {
+    isShowAbout = !isShowAbout;
+  }
+
+  void saveGame() {
+    Map<String, dynamic> data = {
+      'playground': playground.toJson(),
+      'fallingCombination': fallingCombination?.toJson(),
+      'previewArea': previewArea._previewCombination.toJson(),
+      'position': {'x': fallingPosition.x, 'y': fallingPosition.y},
+      'score': score,
+      'isPaused': isPaused,
+      'isGameOver': isGameOver,
+      'duration': duration,
+    };
+    _writeData(data);
+  }
+
+  void loadGame() async {
+    Map<String, dynamic> data = await _readData();
+    if (data.isEmpty) return;
+    playground.fromJson(data['playground']);
+    fallingCombination = Combination.fromJson(data['fallingCombination']);
+    previewArea._previewCombination = Combination.fromJson(data['previewArea']);
+    fallingPosition = Point(data['position']['x'], data['position']['y']);
+    score = data['score'];
+    isPaused = data['isPaused'];
+    isGameOver = data['isGameOver'];
+    duration = data['duration'];
+  }
+
+  Future<String> get _localPath async {
+    final directory = await getApplicationDocumentsDirectory();
+    return directory.path;
+  }
+
+  Future<File> get _localFile async {
+    final path = await _localPath;
+    return File('$path/data.json');
+  }
+
+  // 写入数据
+  Future<File> _writeData(Map<String, dynamic> data) async {
+    final file = await _localFile;
+    return file.writeAsString(jsonEncode(data));
+  }
+
+  // 读取数据
+  Future<Map<String, dynamic>> _readData() async {
+    try {
+      final file = await _localFile;
+      final contents = await file.readAsString();
+      return jsonDecode(contents);
+    } catch (e) {
+      return {};
+    }
   }
 
   bool isCollision() {
     for (int i = 0; i < 4; i++) {
       for (int j = 0; j < 4; j++) {
-        if (playground.getGridValue(position.x + j, position.y + i) +
+        if (playground.getGridValue(
+                  fallingPosition.x + j,
+                  fallingPosition.y + i,
+                ) +
                 fallingCombination!.currentShape[i][j] >
             1) {
           return true;
@@ -156,8 +249,8 @@ class GameArea {
       for (int j = 0; j < 4; j++) {
         if (fallingCombination!.currentShape[i][j] != 0) {
           playground.setGridValue(
-            position.x + j,
-            position.y + i,
+            fallingPosition.x + j,
+            fallingPosition.y + i,
             fallingCombination!.currentShape[i][j],
           );
         }
@@ -184,17 +277,12 @@ class GameArea {
         }
       }
     }
+
     return clearedRows;
   }
 
   int calculateScore(int clearedRows) {
     return pow(2, clearedRows).toInt() * 100 - 100;
-  }
-
-  Combination getNextCombination() {
-    Combination combination = previewArea.currentCombination;
-    previewArea.makeNewPreview();
-    return combination;
   }
 
   void paint(Canvas canvas, Size size, Size brickSize) {
@@ -206,10 +294,11 @@ class GameArea {
       ..style = PaintingStyle.fill;
 
     // 画一个 100x100 的正方形
+
     for (int i = 0; i < 22; i++) {
       for (int j = 0; j < 10; j++) {
-        int fallingY = i - position.y;
-        int fallingX = j - position.x;
+        int fallingY = i - fallingPosition.y;
+        int fallingX = j - fallingPosition.x;
         canvas.drawRect(
           Rect.fromLTWH(
             j * brickSize.width,
@@ -229,18 +318,22 @@ class GameArea {
         );
       }
     }
-    if (isGameOver) {
+    if(isShowAbout) {
+      paintAbout(canvas, size);
+    } else if (isGameOver) {
       paintGameOver(canvas, size);
+    } else if (isPaused) {
+      paintPause(canvas, size);
     }
   }
 
   List<Color> colors = [GameColors.gameOverText1, GameColors.gameOverText2];
   double colorIndex = 0;
-  void paintGameOver(Canvas canvas, Size size) {
+  void _paintInfo(Canvas canvas, Size size, String title, String content) {
     final textSpan = TextSpan(
       children: [
         TextSpan(
-          text: 'GAME OVER \n',
+          text: "$title\n",
           style: TextStyle(
             color: colors[((colorIndex += 0.05).toInt() % colors.length)],
             fontSize: 24,
@@ -248,7 +341,7 @@ class GameArea {
           ),
         ),
         TextSpan(
-          text: 'Press Restart to play again\n',
+          text: "\n$content\n",
           style: TextStyle(
             color: colors[(colorIndex.toInt() % colors.length)],
             fontSize: 12,
@@ -263,42 +356,53 @@ class GameArea {
       textDirection: TextDirection.ltr, // 必须指定，否则不会渲染
       textAlign: TextAlign.center,
     );
-
     // 先布局
     textPainter.layout(minWidth: size.width, maxWidth: size.width);
-
     // 指定绘制位置
     final offset = Offset(0, 100);
-
     // 绘制到 Canvas
     textPainter.paint(canvas, offset);
+  }
+  void paintGameOver(Canvas canvas, Size size) {
+    _paintInfo(canvas, size, 'GAME OVER', 'Press Restart to play again');
+  }
+  
+  void paintPause(Canvas canvas, Size size) {
+    
+    _paintInfo(canvas, size, 'PAUSED', 'Press Resume to continue');
+  }
+   
+  void paintAbout(Canvas canvas, Size size) {
+    _paintInfo(canvas, size, 'About Tetris', 'Version: 0.0.1\nProgrammed by Tinson\nSeptember 2025\n');
   }
 }
 
 class PreviewArea {
-  Combination _combination = CombinationFactory().createCombination();
-  void makeNewPreview() {
-    _combination = CombinationFactory().createCombination();
+  Combination _previewCombination = CombinationFactory().createCombination();
+
+  Combination getCombination() {
+    Combination tmp = _previewCombination;
+    _previewCombination = CombinationFactory().createCombination();
+    return tmp;
   }
 
-  Combination get currentCombination => _combination;
   void paint(Canvas canvas, Size size, Size brickSize) {
     final paintFG = Paint()
       ..color = GameColors.gameAreaSquare
       ..style = PaintingStyle.fill;
-      final paintBG = Paint()
+    final paintBG = Paint()
       ..color = GameColors.gameAreaGrid
       ..style = PaintingStyle.fill;
     for (int i = 0; i < 4; i++) {
       for (int j = 0; j < 4; j++) {
         canvas.drawRect(
           Rect.fromLTWH(
-            (j + 10) * brickSize.width + 15,
+            j * brickSize.width,
             i * brickSize.height,
             brickSize.width - 1,
             brickSize.height - 1,
           ),
-          _combination.currentShape[i][j] == 0 ? paintBG : paintFG,
+          _previewCombination.currentShape[i][j] == 0 ? paintBG : paintFG,
         );
       }
     }

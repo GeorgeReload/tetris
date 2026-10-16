@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math';
 
 class CombinationFactory {
@@ -194,9 +195,28 @@ class Combination {
   final List<List<List<int>>> shape;
   int index = 0;
   Combination(this.shape);
+
   Combination rotate([int count = 1]) {
     index = (index + count) % shape.length;
     return this;
+  }
+  String toJson() {
+    return jsonEncode({
+      'shape': shape,
+      'index': index,
+    });
+  }
+
+  factory Combination.fromJson(String json) {
+    final data = jsonDecode(json);
+
+    final shape = (data['shape'] as List)
+        .map((outer) => (outer as List)
+            .map((inner) => (inner as List).map((e) => e as int).toList())
+            .toList())
+        .toList();
+
+    return Combination(shape)..index = data['index'];
   }
 
   List<List<int>> get currentShape => shape[index];
